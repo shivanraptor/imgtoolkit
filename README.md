@@ -48,6 +48,14 @@ find_duplicate(folder='duplicate/', prefix='DUPLICATED_')
 - `folder` (string): the script will create a folder with specified name and move duplicated photos to the folder.
 - `prefix` (string): the script will append the prefix to the filename when moving to the duplicate folder. Set it to empty string to avoid this behavior.
 
+## Installation
+
+If you have installed `pip`, you can install this package via this command:
+
+```
+pip install imgtoolkit
+```
+
 ## Questions or Suggestions
 
 Please open an issue if you find problems using this script. Suggestions or feature requests are also welcomed.
