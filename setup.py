@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.3'
+VERSION = '0.0.4'
 DESCRIPTION = 'Image tools for checking photos for blur and duplicates'
 LONG_DESCRIPTION = 'An image tool Python package for checking photos for blur and duplicates'
 
@@ -13,6 +13,7 @@ setup(
         long_description=LONG_DESCRIPTION,
         url='https://github.com/shivanraptor/imgtoolkit',
         packages=find_packages(),
+        install_requires=['dhash', 'alive-progress', 'Pillow', 'opencv-python', 'about-time', 'grapheme'],
 
         keywords=['image', 'find duplicate', 'find blur'],
         classifiers=[
