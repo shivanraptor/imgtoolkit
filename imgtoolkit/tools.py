@@ -18,7 +18,7 @@ IMG_FILTER = '*.jpg'
 FOLDER_DUP = 'duplicate/'
 FOLDER_BLUR = 'blur/'
 DUP_PREFIX = 'DUPLICATED_'
-
+VERSION = '0.0.5'
 
 # Main Functions
 def find_duplicate(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
@@ -71,6 +71,23 @@ def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20):
         print_elapsed(end-start)
 
 
+def analyze_blur(target_folder: str = '.'):
+    print("Start analyzing blur at path " + target_folder)
+    start = timer()
+    
+    imgs = glob.glob(IMG_FILTER, root_dir=target_folder)
+    with alive_bar(len(list(imgs))) as bar:
+        for i in imgs:
+            img = cv2.imread(i)
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            val = numpy.max(cv2.convertScaleAbs(cv2.Laplacian(gray, 3)))
+            print(i, "Blur Value: " + val)
+            bar()
+            
+    end = timer()
+    print_elapsed(end-start)
+
+
 # Support Functions
 def process_duplicate(file_list):
     rev_dict = {}
@@ -108,6 +125,9 @@ def makehash(t):
 
 def print_elapsed(sec):
     print("Elapsed Time: ", timedelta(seconds=sec))
+    
+def version():
+    print(VERSION)
 
 
 def main():

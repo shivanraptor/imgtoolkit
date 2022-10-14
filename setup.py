@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.4'
+VERSION = '0.0.5'
 DESCRIPTION = 'Image tools for checking photos for blur and duplicates'
 LONG_DESCRIPTION = 'An image tool Python package for checking photos for blur and duplicates'
 
