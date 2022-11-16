@@ -23,6 +23,8 @@ FOLDER_DUP = 'duplicate/'
 FOLDER_BLUR = 'blur/'
 DUP_PREFIX = 'DUPLICATED_'
 
+debug_flag = False
+
 # Main Functions
 def find_duplicate(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
     print("Start finding duplicates")
@@ -108,12 +110,11 @@ def fakepng_removebg(imgpath, savepath):
     checker_size_x = 0
     checker_size_y = 0
 
+    checker_color1 = tuple(color)
+    checker_color2 = (255, 255, 255)
+
     offset_x = 0
     offset_y = 0
-    if (color == [255, 255, 255]).all(): # start with white color
-        checker_color1 = tuple(color) # white
-    else:
-        checker_color2 = tuple(color)
 
     for x in range(w):
         next_color = original[0][x]
@@ -121,6 +122,7 @@ def fakepng_removebg(imgpath, savepath):
             # color changed
             checker_size_x = x
             offset_x = x
+            checker_color2 = next_color # Assume the first row of the image has checker
             break
 
     for y in range(h):
@@ -129,10 +131,6 @@ def fakepng_removebg(imgpath, savepath):
             # color changed
             checker_size_y = y
             offset_y = y
-            if checker_color1 == (255, 255, 255):
-                checker_color2 = tuple(next_color)
-            else:
-                checker_color1 = tuple(next_color)
             break
 
     # if the checker is a square
@@ -152,14 +150,16 @@ def fakepng_removebg(imgpath, savepath):
                 if (y&1)^(x&1):
                     for di in range(checker_size_x):
                         for dj in range(checker_size_x):
-                            pixels[i+di, j+dj] = checker_color2
+                            pixels[i+di, j+dj] = tuple(checker_color2)
                 else:
                     for di in range(checker_size_x):
                         for dj in range(checker_size_x):
-                            pixels[i+di, j+dj] = checker_color1
+                            pixels[i+di, j+dj] = tuple(checker_color1)
 
-        checkerboard = checkerboard.crop((0, 0, w, h))
-        checkerboard = checkerboard.resize((w, h))
+        checkerboard.save('checkerboard.png')
+        start_x = checker_size_x - offset_x
+        start_y = checker_size_x - offset_y
+        checkerboard = checkerboard.crop((start_x, start_y, w + start_x, h + start_y))
 
     	# ========================
     	# Step 3: Subtract Tilemap
@@ -232,14 +232,34 @@ def print_elapsed(sec):
 def show_version():
     print("imgtoolkit " + version("imgtoolkit"))
 
+def set_debug(value):
+    if type(value) == bool:
+        if value is True:
+            sys.excepthook = exception_handler
+        else:
+            sys.excepthook = exception_handler_simple
+    else:
+        raise ValueError("set_debug() input parameter is not Boolean.")
 
 def main():
     print("Image Toolkit loaded")
 
 def exception_handler(exception_type, exception, traceback):
+    if issubclass(exception_type, KeyboardInterrupt):
+        sys.__excepthook__(exception_type, exception, traceback)
+        return
+
+    print(exception_type.__name__,": ", exception)
+    print(traceback)
+
+def exception_handler_simple(exception_type, exception, traceback):
+    if issubclass(exception_type, KeyboardInterrupt):
+        sys.__excepthook__(exception_type, exception, traceback)
+        return
+
     print(exception_type.__name__,": ", exception)
 
 # default exception handler
-sys.excepthook = exception_handler
+sys.excepthook = exception_handler_simple
 if __name__ == '__main__':
     main()
