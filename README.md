@@ -1,14 +1,20 @@
 # Image Toolkit
 
-This is an image tool package for organizing photos. Main features are:
+This is an image tool package for organizing photos. The main features are:
 
 - **Find visually duplicated photos**: by comparing the photo hashes, the script can identify visually identical photos
 - **Find blurred photos**: by calculating Laplacian value of the photos, the script can also identify blurred photos
 
-Note: Only JPEG images are tested and supported at this version.
+Note: Only JPEG images are tested and supported in this version.
 
 ## Basic Usage
+In the command line, you can just use the following command:
+```
+imgtoolkit
+```
+Blurred and duplicated image checks will be automatically executed.
 
+In Python:
 ```
 from imgtoolkit import tools
 
@@ -39,14 +45,14 @@ Phase 3 - Move Duplicates
 ```
 find_blur(folder='blur/', threshold=20)
 ```
-- `folder` (string): the script will create a folder with specified name and move blurred photos to the folder.
-- `threshold` (integer): the lower the value, the stricter the check. The default value 20 is generally okay for most cases.
+- `folder` (string): the script will create a folder with a specified name and move blurred photos to the folder.
+- `threshold` (integer): the lower the value, the stricter the check. The default value of 20 is generally okay for most cases.
 
 ```
 find_duplicate(folder='duplicate/', prefix='DUPLICATED_')
 ```
-- `folder` (string): the script will create a folder with specified name and move duplicated photos to the folder.
-- `prefix` (string): the script will append the prefix to the filename when moving to the duplicate folder. Set it to empty string to avoid this behavior.
+- `folder` (string): the script will create a folder with the specified name and move duplicated photos to the folder.
+- `prefix` (string): the script will append the prefix to the filename when moving to the duplicate folder. Set it to an empty string to avoid this behavior.
 
 ## Installation
 
@@ -56,13 +62,24 @@ If you have installed `pip`, you can install this package via this command:
 pip install imgtoolkit
 ```
 
+## Upgrade
+
+To upgrade an existing installation, you can use the following command:
+```
+pip install imgtoolkit --upgrade
+```
+
 ## Questions or Suggestions
 
 Please open an issue if you find problems using this script. Suggestions or feature requests are also welcomed.
+
+## Future Development
+
+- More command line parameters
 
 ## Donation
 
 Donations are welcomed. We accept ETH or SOL.
 
-ETH: 0x5B3318109932c8EDc6297197895afDD68567672D
-SOL: GLBLjrYxhbncTFR6CbRTrpPjtaNJax13A82C8F3ceSAX
+- ETH: 0x5B3318109932c8EDc6297197895afDD68567672D
+- SOL: GLBLjrYxhbncTFR6CbRTrpPjtaNJax13A82C8F3ceSAX
