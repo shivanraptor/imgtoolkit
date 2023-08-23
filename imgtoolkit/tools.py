@@ -242,7 +242,9 @@ def set_debug(value):
         raise ValueError("set_debug() input parameter is not Boolean.")
 
 def main():
-    print("Image Toolkit loaded")
+    print("Image Toolkit", version("imgtoolkit"), "loaded")
+    self.find_blur()
+    self.find_duplicate()
 
 def exception_handler(exception_type, exception, traceback):
     if issubclass(exception_type, KeyboardInterrupt):

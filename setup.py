@@ -1,12 +1,13 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.7'
+VERSION = '0.0.8'
 DESCRIPTION = 'Collection of image tools for checking photos for blur and duplicates, and handle fake PNG transparency'
 LONG_DESCRIPTION = 'A collection of image tools for checking photos for blur and duplicates, and handle fake PNG transparency'
 
 setup(
         name='imgtoolkit',
         version=VERSION,
+        python_requires='>3.8.0',
         author="Raptor K",
         author_email='findme' '@' 'raptor.hk',
         description=DESCRIPTION,
@@ -14,7 +15,11 @@ setup(
         url='https://github.com/shivanraptor/imgtoolkit',
         packages=find_packages(),
         install_requires=['dhash', 'alive-progress', 'Pillow', 'opencv-python', 'about-time', 'grapheme'],
-
+        entry_points = {
+            'console_scripts': [
+                'imgtooklit = imgtoolkit.tools:main'
+            ]
+        },
         keywords=['image', 'find duplicate', 'find blur', 'fake png'],
         classifiers=[
             "Development Status :: 4 - Beta",
