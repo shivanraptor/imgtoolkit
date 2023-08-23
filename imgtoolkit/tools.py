@@ -243,8 +243,8 @@ def set_debug(value):
 
 def main():
     print("Image Toolkit", version("imgtoolkit"), "loaded")
-    self.find_blur()
-    self.find_duplicate()
+    find_blur()
+    find_duplicate()
 
 def exception_handler(exception_type, exception, traceback):
     if issubclass(exception_type, KeyboardInterrupt):
