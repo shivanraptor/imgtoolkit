@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.0.8'
+VERSION = '0.0.9'
 DESCRIPTION = 'Collection of image tools for checking photos for blur and duplicates, and handle fake PNG transparency'
 LONG_DESCRIPTION = 'A collection of image tools for checking photos for blur and duplicates, and handle fake PNG transparency'
 
@@ -17,7 +17,7 @@ setup(
         install_requires=['dhash', 'alive-progress', 'Pillow', 'opencv-python', 'about-time', 'grapheme'],
         entry_points = {
             'console_scripts': [
-                'imgtooklit = imgtoolkit.tools:main'
+                'imgtoolkit = imgtoolkit.tools:main'
             ]
         },
         keywords=['image', 'find duplicate', 'find blur', 'fake png'],
