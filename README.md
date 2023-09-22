@@ -1,30 +1,22 @@
-# Image Toolkit
+# Image Toolkit v0.1.1
 
 This is an image tool package for organizing photos. The main features are:
 
 - **Find visually duplicated photos**: by comparing the photo hashes, the script can identify visually identical photos
 - **Find blurred photos**: by calculating Laplacian value of the photos, the script can also identify blurred photos
+- **Remove fake transparent background**: we use various image processing methods to remove fake checkerboard transparent background
+- **Remove duplicated images prefix**: after processing the duplicated photos, there is a prefix added to the duplicated images; you can use our tool to undo the renaming.
 
-Note: Only JPEG images are tested and supported in this version.
+Note: For blurry and duplicated photo checks, only JPEG images are tested and supported in this version. For fake transparent background removal, we only support PNG at this moment.
 
 ## Basic Usage
+
+### Function 1: Identify Blurry and Duplicated JPEG Images
 In the command line, you can just use the following command:
 ```
 imgtoolkit
 ```
-Blurred and duplicated image checks will be automatically executed.
-
-In Python:
-```
-from imgtoolkit import tools
-
-if __name__ == '__main__':
-  # Find blur photos
-	tools.find_blur()
-
-  # Find duplicated photos
-	tools.find_duplicate()
-```
+Blurred and duplicated image checks on the current folder will be automatically executed; `blur` and `duplicate` folders will be created to store blurry and duplicated images.
 
 **Sample Output**
 
@@ -41,7 +33,36 @@ Phase 3 - Move Duplicates
 93 duplicated images moved to duplicate/
 ```
 
-## Parameters
+### Function 2 (Available since v0.1.1): Remove Duplicated Images' Prefix (after using Function 1)
+To remove the prefix of the duplicated images in the `duplicate` folder, you can execute the following command in the folder containing the `duplicate` folder:
+```
+imgtoolkit remove_duplicate_prefix
+```
+
+### Function 3 (Available since v0.1.1): Remove Fake PNG Background
+To remove the fake PNG background, you can use the following command:
+```
+imgtoolkit remove_fakepng_bg source.png save.png
+```
+where `source.png` is the PNG that requires background removal, while `save.png` is the path you want to save the fixed image.
+
+---
+
+### Using Our Toolkit in Python
+
+In Python, you can find blurry and duplicated photos as follows:
+```
+from imgtoolkit import tools
+
+if __name__ == '__main__':
+  # Find blur photos
+	tools.find_blur()
+
+  # Find duplicated photos
+	tools.find_duplicate()
+```
+
+## Parameters used in Python
 ```
 find_blur(folder='blur/', threshold=20)
 ```
