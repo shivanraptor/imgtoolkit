@@ -15,6 +15,8 @@ from alive_progress import alive_bar
 from itertools import chain
 from pathlib import Path
 from importlib.metadata import version
+from argparse import ArgumentParser
+
 
 warnings.simplefilter('ignore', Image.DecompressionBombWarning)
 
@@ -29,7 +31,7 @@ debug_flag = False
 def find_duplicate(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
     print("Start finding duplicates")
     if os.path.exists(folder) and listdir_nohidden(folder):
-        print("ERROR: Blur folder exists and not empty. Halting")
+        print("ERROR: Duplicate folder exists and not empty. Halting")
     else:
         start = timer()
         with Manager() as manager:
@@ -75,6 +77,19 @@ def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20):
         end = timer()
         print_elapsed(end-start)
 
+def remove_duplicate_prefix(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
+    if os.path.exists(folder) and listdir_nohidden(folder):
+        start = timer()
+        imgs = glob.glob(FOLDER_DUP + IMG_FILTER)
+        cnt = 0
+        with alive_bar(len(list(imgs))) as bar:
+            for i in imgs:
+                os.rename(i, i.replace(DUP_PREFIX, ''))
+                cnt += 1
+        end = timer()
+        print(cnt, "images have been renamed.")
+    else:
+        print("Nothing to rename")
 
 def analyze_blur(target_folder: str = '.'):
     start = timer()
@@ -93,9 +108,11 @@ def analyze_blur(target_folder: str = '.'):
     end = timer()
     print_elapsed(end-start)
 
-def fakepng_removebg(imgpath, savepath):
+def fakepng_removebg(config):
+    imgpath = config.src
+    savepath = config.dst
     if not os.path.exists(imgpath):
-        raise ValueError("The input file does not exist, or cannot be read.")
+        raise ValueError("ERROR: The input file does not exist, or cannot be read.")
 
     # ========================
     # Step 1: Detect Tile Size
@@ -186,8 +203,10 @@ def fakepng_removebg(imgpath, savepath):
 
     	# Writing and saving the final results to a new image
         cv2.imwrite(savepath, rgba)
+        print('Done! Fixed image is saved at', savepath)
+        os.remove('checkerboard.png')
     else:
-        raise ValueError("Checker size is not square. Please check.")
+        raise ValueError("ERROR: Checker size is not square. Please check.")
 
 
 # Support Functions
@@ -243,8 +262,30 @@ def set_debug(value):
 
 def main():
     print("Image Toolkit", version("imgtoolkit"), "loaded")
-    find_blur()
-    find_duplicate()
+
+    parser = ArgumentParser()
+    subparsers = parser.add_subparsers()
+
+    # version
+    parser_version = subparsers.add_parser('version', help='Show version')
+    parser_version.set_defaults(func=show_version)
+
+    # remove_duplciate_prefix
+    parser_remove_dup_prefix = subparsers.add_parser('remove_duplicate_prefix', help='Remove duplicated image prefix')
+    parser_remove_dup_prefix.set_defaults(func=remove_duplicate_prefix)
+
+    # remove fake background
+    parser_fakepng = subparsers.add_parser('remove_fakepng_bg')
+    parser_fakepng.add_argument('src', help='The PNG path with fake transparent background')
+    parser_fakepng.add_argument('dst', help='The path to save the edited image')
+    parser_fakepng.set_defaults(func=fakepng_removebg)
+    
+    if len(sys.argv) <= 1:
+        find_blur()
+        find_duplicate()
+    else:
+        args = parser.parse_args()
+        args.func(args)
 
 def exception_handler(exception_type, exception, traceback):
     if issubclass(exception_type, KeyboardInterrupt):
