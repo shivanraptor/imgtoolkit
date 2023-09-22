@@ -248,7 +248,7 @@ def print_elapsed(sec):
     print("Elapsed Time: ", timedelta(seconds=sec))
 
 
-def show_version():
+def show_version(config):
     print("imgtoolkit " + version("imgtoolkit"))
 
 def set_debug(value):
