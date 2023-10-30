@@ -1,4 +1,4 @@
-# Image Toolkit v0.1.1
+# Image Toolkit v0.1.2
 
 This is an image tool package for organizing photos. The main features are:
 
@@ -33,10 +33,10 @@ Phase 3 - Move Duplicates
 93 duplicated images moved to duplicate/
 ```
 
-### Function 2 (Available since v0.1.1): Remove Duplicated Images' Prefix (after using Function 1)
-To remove the prefix of the duplicated images in the `duplicate` folder, you can execute the following command in the folder containing the `duplicate` folder:
+### Function 2 (Available since v0.1.2): Remove Duplicated Images' Prefix (after using Function 1)
+To remove the prefix of the duplicated images in the `duplicate` folder, you can execute the following command by specifying target folder:
 ```
-imgtoolkit remove_duplicate_prefix
+imgtoolkit remove_duplicate_prefix the_folder_which_needs_action/
 ```
 
 ### Function 3 (Available since v0.1.1): Remove Fake PNG Background
