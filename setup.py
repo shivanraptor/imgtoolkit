@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '0.1.1'
+VERSION = '0.1.2'
 DESCRIPTION = 'Collection of image tools for checking photos for blur and duplicates, and handle fake PNG transparency'
 LONG_DESCRIPTION = 'A collection of image tools for checking photos for blur and duplicates, and handle fake PNG transparency'
 

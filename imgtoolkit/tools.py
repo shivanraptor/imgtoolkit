@@ -78,9 +78,13 @@ def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20):
         print_elapsed(end-start)
 
 def remove_duplicate_prefix(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
+    if hasattr(folder, "folder"):
+        folder = vars(folder).get("folder")
+    
+    print("Working folder:", os.path.join(folder, IMG_FILTER))
     if os.path.exists(folder) and listdir_nohidden(folder):
         start = timer()
-        imgs = glob.glob(FOLDER_DUP + IMG_FILTER)
+        imgs = glob.glob(os.path.join(folder, IMG_FILTER))
         cnt = 0
         with alive_bar(len(list(imgs))) as bar:
             for i in imgs:
@@ -272,6 +276,7 @@ def main():
 
     # remove_duplciate_prefix
     parser_remove_dup_prefix = subparsers.add_parser('remove_duplicate_prefix', help='Remove duplicated image prefix')
+    parser_remove_dup_prefix.add_argument('folder', help='The folder that contains image files that marked as duplicate')
     parser_remove_dup_prefix.set_defaults(func=remove_duplicate_prefix)
 
     # remove fake background
