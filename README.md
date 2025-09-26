@@ -1,106 +1,144 @@
-# Image Toolkit v0.1.1
+# imgtoolkit
 
-This is an image tool package for organizing photos. The main features are:
+A powerful Python toolkit for image processing, specializing in finding duplicate and blurry images. This tool helps you organize your image collections by identifying and managing duplicate images and detecting low-quality or blurry photos.
 
-- **Find visually duplicated photos**: by comparing the photo hashes, the script can identify visually identical photos
-- **Find blurred photos**: by calculating Laplacian value of the photos, the script can also identify blurred photos
-- **Remove fake transparent background**: we use various image processing methods to remove fake checkerboard transparent background
-- **Remove duplicated images prefix**: after processing the duplicated photos, there is a prefix added to the duplicated images; you can use our tool to undo the renaming.
+## Features
 
-Note: For blurry and duplicated photo checks, only JPEG images are tested and supported in this version. For fake transparent background removal, we only support PNG at this moment.
-
-## Basic Usage
-
-### Function 1: Identify Blurry and Duplicated JPEG Images
-In the command line, you can just use the following command:
-```
-imgtoolkit
-```
-Blurred and duplicated image checks on the current folder will be automatically executed; `blur` and `duplicate` folders will be created to store blurry and duplicated images.
-
-**Sample Output**
-
-```
-Start finding blurs
-|████████████████████████████████████████| 12148/12148 [100%] in 18:38.0 (10.87/s)
-11 blur photos processed, moved to blur/
-Elapsed Time:  0:18:38.067728
-Start finding duplicates
-Phase 1 - Hashing
-|████████████████████████████████████████| 12137/12137 [100%] in 2:25.1 (83.63/s)
-Phase 2 - Find Duplicates
-Phase 3 - Move Duplicates
-93 duplicated images moved to duplicate/
-```
-
-### Function 2 (Available since v0.1.1): Remove Duplicated Images' Prefix (after using Function 1)
-To remove the prefix of the duplicated images in the `duplicate` folder, you can execute the following command in the folder containing the `duplicate` folder:
-```
-imgtoolkit remove_duplicate_prefix
-```
-
-### Function 3 (Available since v0.1.1): Remove Fake PNG Background
-To remove the fake PNG background, you can use the following command:
-```
-imgtoolkit remove_fakepng_bg source.png save.png
-```
-where `source.png` is the PNG that requires background removal, while `save.png` is the path you want to save the fixed image.
-
----
-
-### Using Our Toolkit in Python
-
-In Python, you can find blurry and duplicated photos as follows:
-```
-from imgtoolkit import tools
-
-if __name__ == '__main__':
-  # Find blur photos
-	tools.find_blur()
-
-  # Find duplicated photos
-	tools.find_duplicate()
-```
-
-## Parameters used in Python
-```
-find_blur(folder='blur/', threshold=20)
-```
-- `folder` (string): the script will create a folder with a specified name and move blurred photos to the folder.
-- `threshold` (integer): the lower the value, the stricter the check. The default value of 20 is generally okay for most cases.
-
-```
-find_duplicate(folder='duplicate/', prefix='DUPLICATED_')
-```
-- `folder` (string): the script will create a folder with the specified name and move duplicated photos to the folder.
-- `prefix` (string): the script will append the prefix to the filename when moving to the duplicate folder. Set it to an empty string to avoid this behavior.
+- **Find Duplicate Images**: Uses perceptual hashing (dhash) to identify visually identical images
+- **Detect Blurry Images**: Identifies and separates blurry or low-quality images
+- **Remove Fake PNG Backgrounds**: Converts fake transparent PNG images to true transparent PNGs
+- **Multi-format Support**: Works with various image formats (JPG, JPEG, PNG, BMP, TIFF)
+- **Configurable**: Supports JSON configuration files for customized settings
+- **Parallel Processing**: Uses multiprocessing for improved performance
+- **Progress Tracking**: Shows progress bars for long-running operations
 
 ## Installation
 
-If you have installed `pip`, you can install this package via this command:
-
-```
+```bash
 pip install imgtoolkit
 ```
 
-## Upgrade
+### Upgrade to the Latest Version
 
-To upgrade an existing installation, you can use the following command:
+```bash
+pip install --upgrade imgtoolkit
 ```
-pip install imgtoolkit --upgrade
+
+## Usage
+
+### Command Line Interface
+
+```bash
+# Show help
+imgtoolkit --help
+
+# Find duplicate images
+imgtoolkit find-duplicates [--folder OUTPUT_FOLDER] [--prefix PREFIX] [--formats jpg png]
+
+# Find blurry images
+imgtoolkit find-blur [--folder OUTPUT_FOLDER] [--threshold BLUR_THRESHOLD] [--formats jpg png]
+
+# Remove duplicate prefix from images
+imgtoolkit remove-duplicate-prefix FOLDER [--prefix PREFIX]
+
+# Remove fake transparent background from PNG
+imgtoolkit remove-fakepng-bg SOURCE_PNG DESTINATION_PNG
+
+# Show version
+imgtoolkit version
 ```
 
-## Questions or Suggestions
+### Using Configuration File
 
-Please open an issue if you find problems using this script. Suggestions or feature requests are also welcomed.
+Create a JSON configuration file (e.g., `config.json`):
 
-## Future Development
+```json
+{
+    "duplicate": {
+        "folder": "duplicates/",
+        "prefix": "DUP_",
+        "formats": ["jpg", "png"]
+    },
+    "blur": {
+        "folder": "blurry/",
+        "threshold": 25,
+        "formats": ["jpg", "png"]
+    }
+}
+```
 
-- More command line parameters
+Then run with the config file:
 
-## Donation
+```bash
+imgtoolkit --config config.json find-duplicates
+imgtoolkit --config config.json find-blur
+```
 
-Donations are welcomed. We accept ETH or SOL.
+## Command Options
 
-- ETH: 0x5B3318109932c8EDc6297197895afDD68567672D
-- SOL: GLBLjrYxhbncTFR6CbRTrpPjtaNJax13A82C8F3ceSAX
+### find-duplicates
+- `--folder`: Output folder for duplicate images (default: "duplicate/")
+- `--prefix`: Prefix for marking duplicate files (default: "DUPLICATED_")
+- `--formats`: List of image formats to process (default: jpg, jpeg, png)
+
+### find-blur
+- `--folder`: Output folder for blurry images (default: "blur/")
+- `--threshold`: Blur detection threshold (default: 20, lower = more blurry)
+- `--formats`: List of image formats to process (default: jpg, jpeg, png)
+
+### remove-duplicate-prefix
+- `folder`: The folder containing marked duplicate images
+- `--prefix`: Prefix to remove from filenames (default: "DUPLICATED_")
+
+### remove-fakepng-bg
+- `src`: Source PNG file with fake transparent background
+- `dst`: Destination path for the fixed PNG file
+
+## Supported Image Formats
+
+- JPEG (.jpg, .jpeg)
+- PNG (.png)
+- BMP (.bmp)
+- TIFF (.tiff)
+
+## Requirements
+
+- Python 3.6+
+- OpenCV (cv2)
+- Pillow
+- dhash
+- numpy
+- alive-progress
+
+## Error Handling
+
+The toolkit provides clear error messages for common issues:
+- Invalid image formats
+- Missing or inaccessible files
+- Processing errors
+- Invalid configuration
+
+## Development
+
+To contribute to imgtoolkit:
+
+1. Clone the repository
+2. Install development dependencies:
+```bash
+pip install -e ".[dev]"
+```
+3. Run tests:
+```bash
+pytest
+```
+
+## Version History
+**v0.1.3**
+Resolved a bug of handling incomplete / corrupted image files
+
+**v0.1.2**
+Revamp the command structure, adding features of remove fake PNG backgrounds
+
+## License
+
+MIT License - See LICENSE file for details.

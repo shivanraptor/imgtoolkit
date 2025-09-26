@@ -6,7 +6,7 @@ import numpy as np
 import warnings
 import sys
 from math import ceil
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFile, UnidentifiedImageError
 from timeit import default_timer as timer
 from datetime import timedelta
 from concurrent.futures import ProcessPoolExecutor
@@ -16,7 +16,11 @@ from itertools import chain
 from pathlib import Path
 from importlib.metadata import version
 from argparse import ArgumentParser
+from typing import Set, Dict, Any, Optional
+import json
 
+# Avoid OSError :  image file is truncated hashing error
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 warnings.simplefilter('ignore', Image.DecompressionBombWarning)
 
@@ -27,18 +31,47 @@ DUP_PREFIX = 'DUPLICATED_'
 
 debug_flag = False
 
+# Supported image formats
+SUPPORTED_FORMATS = {
+    'jpg': '*.jpg',
+    'jpeg': '*.jpeg',
+    'png': '*.png',
+    'bmp': '*.bmp',
+    'tiff': '*.tiff'
+}
+
+class ImageToolkitError(Exception):
+    """Base exception class for ImageToolkit errors."""
+    pass
+
 # Main Functions
-def find_duplicate(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
+def find_duplicate(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX, formats: Optional[list[str]] = None) -> None:
+    """Find and move duplicate images to a specified folder.
+    
+    Args:
+        folder: Directory where duplicate images will be moved
+        prefix: Prefix to add to duplicate image filenames
+        formats: List of image formats to process (e.g. ['jpg', 'png'])
+        
+    Raises:
+        ImageToolkitError: If no valid images found or processing fails
+        OSError: If folder creation or file operations fail
+    """
     print("Start finding duplicates")
-    if os.path.exists(folder) and listdir_nohidden(folder):
-        print("ERROR: Duplicate folder exists and not empty. Halting")
-    else:
+    try:
+        if os.path.exists(folder) and listdir_nohidden(folder):
+            raise ImageToolkitError("Duplicate folder exists and not empty")
+            
         start = timer()
         with Manager() as manager:
             print("Phase 1 - Hashing")
             d = manager.dict()
-            images = glob.glob(IMG_FILTER)
-            total = len(list(images))
+            images = get_image_files(formats)
+            
+            if not images:
+                raise ImageToolkitError("No valid image files found")
+                
+            total = len(images)
             with alive_bar(total) as bar, ProcessPoolExecutor() as executor:
                 for ex in executor.map(makehash, [(jpg, d) for jpg in images]):
                     bar()
@@ -48,34 +81,62 @@ def find_duplicate(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
             create_dir(folder)
             print("Phase 3 - Move Duplicates")
             move_duplicates(duplicates, folder, prefix)
+            
         end = timer()
         print_elapsed(end-start)
+        
+    except (OSError, UnidentifiedImageError) as e:
+        raise ImageToolkitError(f"Error processing images: {str(e)}")
 
 
-def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20):
+def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20, formats: Optional[list[str]] = None) -> None:
+    """Detect and move blurry images to a specified folder.
+    
+    Args:
+        folder: Directory where blurry images will be moved
+        threshold: Laplacian variance threshold for blur detection (lower = more blurry)
+        formats: List of image formats to process (e.g. ['jpg', 'png'])
+        
+    Raises:
+        ImageToolkitError: If no valid images found or processing fails
+        OSError: If folder creation or file operations fail
+    """
     print("Start finding blurs")
-    if os.path.exists(folder) and listdir_nohidden(folder):
-        print("ERROR: Blur folder exists and not empty. Halting")
-    else:
-        start = timer()
+    try:
+        if os.path.exists(folder) and listdir_nohidden(folder):
+            raise ImageToolkitError("Blur folder exists and not empty")
 
-        imgs = glob.glob(IMG_FILTER)
+        start = timer()
+        imgs = get_image_files(formats)
+        
+        if not imgs:
+            raise ImageToolkitError("No valid image files found")
+
         cnt = 0
         create_dir(folder)
-        with alive_bar(len(list(imgs))) as bar:
+        with alive_bar(len(imgs)) as bar:
             for i in imgs:
-                img = cv2.imread(i)
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                val = np.max(cv2.convertScaleAbs(cv2.Laplacian(gray, 3)))
-                if(val < threshold):
-                    cnt += 1
-                    os.rename(i, folder + i)
+                try:
+                    img = cv2.imread(i)
+                    if img is None:
+                        print(f"Warning: Could not load image {i}")
+                        continue
+                        
+                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                    val = np.max(cv2.convertScaleAbs(cv2.Laplacian(gray, 3)))
+                    if(val < threshold):
+                        cnt += 1
+                        os.rename(i, folder + i)
+                except cv2.error as e:
+                    print(f"Warning: Error processing image {i}: {str(e)}")
                 bar()
 
         print(cnt, "blur photos processed, moved to " + folder)
-
         end = timer()
         print_elapsed(end-start)
+        
+    except Exception as e:
+        raise ImageToolkitError(f"Error processing images: {str(e)}")
 
 def remove_duplicate_prefix(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
     if hasattr(folder, "folder"):
@@ -214,7 +275,15 @@ def fakepng_removebg(config):
 
 
 # Support Functions
-def process_duplicate(file_list):
+def process_duplicate(file_list: Dict[str, str]) -> Set[str]:
+    """Process a dictionary of file hashes to find duplicates.
+    
+    Args:
+        file_list: Dictionary mapping filenames to their dhash values
+        
+    Returns:
+        Set of filenames that are duplicates
+    """
     rev_dict = {}
     for key, value in file_list.items():
         rev_dict.setdefault(value, set()).add(key)
@@ -240,7 +309,16 @@ def move_duplicates(dups, folder, prefix):
     print(cnt, "duplicated images moved to " + folder)
 
 
-def makehash(t):
+def makehash(t: tuple[str, Any]) -> None:
+    """Generate a dhash for an image file.
+    
+    Args:
+        t: Tuple containing (filename, shared_dict)
+        
+    Raises:
+        PIL.UnidentifiedImageError: If image format cannot be identified
+        OSError: If image file cannot be opened
+    """
     filename, d = t
     with Image.open(filename) as image:
         image.draft('L', (32, 32))
@@ -264,33 +342,104 @@ def set_debug(value):
     else:
         raise ValueError("set_debug() input parameter is not Boolean.")
 
+DEFAULT_CONFIG = {
+    'duplicate': {
+        'folder': FOLDER_DUP,
+        'prefix': DUP_PREFIX,
+        'formats': ['jpg', 'jpeg', 'png']
+    },
+    'blur': {
+        'folder': FOLDER_BLUR,
+        'threshold': 20,
+        'formats': ['jpg', 'jpeg', 'png']
+    }
+}
+
+def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+    """Load configuration from file or return defaults.
+    
+    Args:
+        config_path: Path to JSON config file
+        
+    Returns:
+        Configuration dictionary
+    """
+    if config_path and Path(config_path).exists():
+        with open(config_path) as f:
+            user_config = json.load(f)
+            # Merge with defaults
+            config = DEFAULT_CONFIG.copy()
+            config.update(user_config)
+            return config
+    return DEFAULT_CONFIG
+
 def main():
     print("Image Toolkit", version("imgtoolkit"), "loaded")
 
-    parser = ArgumentParser()
-    subparsers = parser.add_subparsers()
+    parser = ArgumentParser(description='Image processing toolkit for finding duplicates and blurry images')
+    parser.add_argument('--config', help='Path to configuration file')
+    subparsers = parser.add_subparsers(dest='command', required=True)
 
     # version
     parser_version = subparsers.add_parser('version', help='Show version')
     parser_version.set_defaults(func=show_version)
 
-    # remove_duplciate_prefix
-    parser_remove_dup_prefix = subparsers.add_parser('remove_duplicate_prefix', help='Remove duplicated image prefix')
-    parser_remove_dup_prefix.add_argument('folder', help='The folder that contains image files that marked as duplicate')
-    parser_remove_dup_prefix.set_defaults(func=remove_duplicate_prefix)
+    # find duplicates
+    parser_find_dup = subparsers.add_parser('find-duplicates', help='Find and move duplicate images')
+    parser_find_dup.add_argument('--folder', help='Output folder for duplicates')
+    parser_find_dup.add_argument('--prefix', help='Prefix for duplicate files')
+    parser_find_dup.add_argument('--formats', nargs='+', help='Image formats to process (e.g. jpg png)')
+    
+    # find blur
+    parser_find_blur = subparsers.add_parser('find-blur', help='Find and move blurry images')
+    parser_find_blur.add_argument('--folder', help='Output folder for blurry images')
+    parser_find_blur.add_argument('--threshold', type=int, help='Blur detection threshold')
+    parser_find_blur.add_argument('--formats', nargs='+', help='Image formats to process (e.g. jpg png)')
+
+    # remove_duplicate_prefix
+    parser_remove_dup_prefix = subparsers.add_parser('remove-duplicate-prefix', help='Remove duplicated image prefix')
+    parser_remove_dup_prefix.add_argument('folder', help='The folder containing marked duplicate images')
+    parser_remove_dup_prefix.add_argument('--prefix', help='Prefix to remove')
 
     # remove fake background
-    parser_fakepng = subparsers.add_parser('remove_fakepng_bg')
-    parser_fakepng.add_argument('src', help='The PNG path with fake transparent background')
-    parser_fakepng.add_argument('dst', help='The path to save the edited image')
-    parser_fakepng.set_defaults(func=fakepng_removebg)
-    
-    if len(sys.argv) <= 1:
-        find_blur()
-        find_duplicate()
-    else:
-        args = parser.parse_args()
-        args.func(args)
+    parser_fakepng = subparsers.add_parser('remove-fakepng-bg', help='Remove fake transparent background from PNG')
+    parser_fakepng.add_argument('src', help='Source PNG file')
+    parser_fakepng.add_argument('dst', help='Destination file path')
+
+    args = parser.parse_args()
+    config = load_config(args.config if hasattr(args, 'config') else None)
+
+    try:
+        if args.command == 'find-duplicates':
+            dup_config = config['duplicate']
+            find_duplicate(
+                folder=args.folder or dup_config['folder'],
+                prefix=args.prefix or dup_config['prefix'],
+                formats=args.formats or dup_config['formats']
+            )
+        elif args.command == 'find-blur':
+            blur_config = config['blur']
+            find_blur(
+                folder=args.folder or blur_config['folder'],
+                threshold=args.threshold or blur_config['threshold'],
+                formats=args.formats or blur_config['formats']
+            )
+        elif args.command == 'remove-duplicate-prefix':
+            remove_duplicate_prefix(args.folder, args.prefix or DUP_PREFIX)
+        elif args.command == 'remove-fakepng-bg':
+            fakepng_removebg(args)
+        elif args.command == 'version':
+            show_version(args)
+        else:
+            parser.print_help()
+    except ImageToolkitError as e:
+        print(f"Error: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        if debug_flag:
+            raise
+        print(f"Unexpected error: {str(e)}")
+        sys.exit(1)
 
 def exception_handler(exception_type, exception, traceback):
     if issubclass(exception_type, KeyboardInterrupt):
@@ -309,5 +458,27 @@ def exception_handler_simple(exception_type, exception, traceback):
 
 # default exception handler
 sys.excepthook = exception_handler_simple
+
+def get_image_files(formats: Optional[list[str]] = None) -> list[str]:
+    """Get list of image files in supported formats.
+    
+    Args:
+        formats: List of formats to include (e.g. ['jpg', 'png']). If None, includes all supported formats.
+    
+    Returns:
+        List of image file paths
+    """
+    if formats is None:
+        formats = SUPPORTED_FORMATS.keys()
+    
+    patterns = [SUPPORTED_FORMATS[fmt] for fmt in formats if fmt in SUPPORTED_FORMATS]
+    if not patterns:
+        raise ImageToolkitError("No valid image formats specified")
+        
+    images = []
+    for pattern in patterns:
+        images.extend(glob.glob(pattern))
+    return images
+
 if __name__ == '__main__':
     main()
