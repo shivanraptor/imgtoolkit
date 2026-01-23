@@ -39,4 +39,4 @@ build-backend = "hatchling.build"
 source = "vcs"
 
 [tool.hatch.build.targets.wheel]
-packages = ["imgtoolkit"]
+packages = ["src/imgtoolkit"]
