@@ -1,10 +1,20 @@
 [project]
 name = "imgtoolkit"
+dynamic = ["version"]
 description = "Collection of image tools for checking photos for blur and duplicates, and handle fake PNG transparency"
-readme = "README.md"
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.9"
-license = {text = "MIT"}
-authors = [{name = "Raptor K", email = "findme@raptor.hk"}]
+license = { text = "MIT" }
+authors = [{ name = "Raptor K", email = "findme@raptor.hk" }]
+keywords = ["image", "find duplicate", "find blur", "fake png"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "License :: OSI Approved :: MIT License",
+]
 
 dependencies = [
     "dhash",
@@ -18,12 +28,15 @@ dependencies = [
 [project.scripts]
 imgtoolkit = "imgtoolkit.tools:main"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[project.urls]
+Homepage = "https://github.com/shivanraptor/imgtoolkit"
 
-[tool.setuptools.packages.find]
-include = ["imgtoolkit*"]
+[build-system]
+requires = ["hatchling >=1.18", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.build.targets.wheel]
+packages = ["imgtoolkit"]
