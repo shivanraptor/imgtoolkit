@@ -3,3 +3,5 @@ dist/
 imgtoolkit.egg-info/
 build/
 build instructions.txt
+imgtoolkit/__pycache__/
+setup.py

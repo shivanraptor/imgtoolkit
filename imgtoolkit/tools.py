@@ -16,7 +16,7 @@ from itertools import chain
 from pathlib import Path
 from importlib.metadata import version
 from argparse import ArgumentParser
-from typing import Set, Dict, Any, Optional
+from typing import Set, Dict, List, Any, Optional
 import json
 
 # Avoid OSError :  image file is truncated hashing error
@@ -57,10 +57,10 @@ def find_duplicate(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX, formats: 
         ImageToolkitError: If no valid images found or processing fails
         OSError: If folder creation or file operations fail
     """
-    print("Start finding duplicates")
+    print("Finding duplicate images")
     try:
         if os.path.exists(folder) and listdir_nohidden(folder):
-            raise ImageToolkitError("Duplicate folder exists and not empty")
+            raise ImageToolkitError("Duplicate folder exists and is not empty")
             
         start = timer()
         with Manager() as manager:
@@ -138,23 +138,76 @@ def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20, formats: Optional[
     except Exception as e:
         raise ImageToolkitError(f"Error processing images: {str(e)}")
 
-def remove_duplicate_prefix(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX):
+
+def remove_duplicate_prefix(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX, hash_length: int = 6):
+    """
+    Remove 'DUPLICATED_' prefix and the following 6-char hash + underscore
+    from filenames in the duplicate folder.
+    
+    Example:
+        DUPLICATED_e8c8c9_534692859_...jpg  →  534692859_...jpg
+    """
+    # Handle possible object input (from your original code)
     if hasattr(folder, "folder"):
         folder = vars(folder).get("folder")
-    
-    print("Working folder:", os.path.join(folder, IMG_FILTER))
-    if os.path.exists(folder) and listdir_nohidden(folder):
-        start = timer()
-        imgs = glob.glob(os.path.join(folder, IMG_FILTER))
-        cnt = 0
-        with alive_bar(len(list(imgs))) as bar:
-            for i in imgs:
-                os.rename(i, i.replace(DUP_PREFIX, ''))
-                cnt += 1
-        end = timer()
-        print(cnt, "images have been renamed.")
-    else:
+
+    full_folder = os.path.join(folder, IMG_FILTER) if IMG_FILTER else folder
+    print("Working folder:", full_folder)
+
+    if not os.path.exists(folder) or not listdir_nohidden(folder):
         print("Nothing to rename")
+        return 0
+
+    # Find all image files
+    imgs = glob.glob(os.path.join(folder, IMG_FILTER))
+    if not imgs:
+        print("No matching files found")
+        return 0
+
+    start = timer()
+    cnt = 0
+
+    with alive_bar(len(imgs), title="Renaming") as bar:
+        for old_path in imgs:
+            old_filename = os.path.basename(old_path)
+            dir_path = os.path.dirname(old_path)
+
+            # Check if it starts with the prefix
+            if not old_filename.startswith(prefix):
+                bar()
+                continue
+
+            # Remove prefix
+            after_prefix = old_filename[len(prefix):]
+
+            # Expect next part to be 6 hex chars + underscore
+            if len(after_prefix) > hash_length + 1 and after_prefix[hash_length] == '_':
+                # Skip the 6 chars + underscore
+                new_filename = after_prefix[hash_length + 1:]
+            else:
+                # If no hash pattern found, just remove prefix
+                new_filename = after_prefix
+                print(f"Warning: No 6-char hash found in {old_filename} — only removed prefix")
+
+            new_path = os.path.join(dir_path, new_filename)
+
+            # Avoid overwriting if target already exists
+            if os.path.exists(new_path):
+                print(f"Conflict: {new_path} already exists — skipping {old_filename}")
+                bar()
+                continue
+
+            try:
+                os.rename(old_path, new_path)
+                cnt += 1
+            except OSError as e:
+                print(f"Error renaming {old_filename} → {new_filename}: {e}")
+
+            bar()
+
+    end = timer()
+    print(f"{cnt} images have been renamed in {end - start:.2f} seconds.")
+    return cnt
 
 def analyze_blur(target_folder: str = '.'):
     start = timer()
@@ -275,22 +328,32 @@ def fakepng_removebg(config):
 
 
 # Support Functions
-def process_duplicate(file_list: Dict[str, str]) -> Set[str]:
-    """Process a dictionary of file hashes to find duplicates.
+def process_duplicate(file_list: Dict[str, str]) -> Dict[str, List[str]]:
+    """
+    Process a dictionary of filename → hash mappings and find duplicates.
     
     Args:
-        file_list: Dictionary mapping filenames to their dhash values
+        file_list: Dictionary mapping filenames to their hash values
         
     Returns:
-        Set of filenames that are duplicates
+        Dictionary where:
+        - key = first 6 characters of the hash
+        - value = list of filenames that share this hash
+        Only includes entries with 2 or more files.
     """
-    rev_dict = {}
-    for key, value in file_list.items():
-        rev_dict.setdefault(value, set()).add(key)
-    result = set(chain.from_iterable(
-        values for key, values in rev_dict.items() if len(values) > 1))
-    return result
+    # Group filenames by full hash
+    hash_to_files: Dict[str, List[str]] = {}
+    for filename, full_hash in file_list.items():
+        hash_to_files.setdefault(full_hash, []).append(filename)
 
+    # Build result: only keep groups with duplicates, use short hash as key
+    result: Dict[str, List[str]] = {}
+    for full_hash, files in hash_to_files.items():
+        if len(files) > 1:
+            short_hash = full_hash[:6]
+            result[short_hash] = files
+
+    return result
 
 def listdir_nohidden(path):
     return glob.glob(os.path.join(path, '*'))
@@ -301,13 +364,45 @@ def create_dir(directory):
         os.makedirs(directory)
 
 
-def move_duplicates(dups, folder, prefix):
-    cnt = 0
-    for i in dups:
-        os.rename(i, folder + prefix + i.replace('./', ''))
-        cnt += 1
-    print(cnt, "duplicated images moved to " + folder)
-
+def move_duplicates(duplicates: Dict[str, List[str]], folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX) -> int:
+    """
+    Move duplicated images to a specified folder and rename them with the short hash prefix.
+    
+    Args:
+        duplicates: Dictionary from process_duplicates:
+                    {short_hash: [filename1, filename2, ...], ...}
+        folder:     Destination folder (will be created if it doesn't exist)
+        prefix:     Prefix to use before the short hash (default: 'DUPLICATED_')
+    
+    Returns:
+        Number of files actually moved
+    """
+    # Create the duplicate folder if it doesn't exist
+    os.makedirs(folder, exist_ok=True)
+    
+    moved_count = 0
+    
+    for short_hash, filenames in duplicates.items():
+        for original_path in filenames:
+            # Get just the filename part (in case path contains directories)
+            filename = os.path.basename(original_path)
+            
+            # New name: DUPLICATED_{short_hash}_{original_filename}
+            new_name = f"{prefix}{short_hash}_{filename}"
+            new_path = os.path.join(folder, new_name)
+            
+            try:
+                # If the file still exists at original location
+                if os.path.exists(original_path):
+                    os.rename(original_path, new_path)
+                    moved_count += 1
+                else:
+                    print(f"Skipped (not found): {original_path}")
+            except OSError as e:
+                print(f"Error moving {original_path} → {new_path}: {e}")
+    
+    print(f"{moved_count} duplicated images moved to '{folder}'")
+    return moved_count
 
 def makehash(t: tuple[str, Any]) -> None:
     """Generate a dhash for an image file.
