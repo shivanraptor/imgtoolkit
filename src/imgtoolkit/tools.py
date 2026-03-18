@@ -138,7 +138,6 @@ def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20, formats: Optional[
     except Exception as e:
         raise ImageToolkitError(f"Error processing images: {str(e)}")
 
-
 def remove_duplicate_prefix(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX, hash_length: int = 6):
     """
     Remove 'DUPLICATED_' prefix and the following 6-char hash + underscore
@@ -377,31 +376,36 @@ def move_duplicates(duplicates: Dict[str, List[str]], folder: str = FOLDER_DUP, 
     Returns:
         Number of files actually moved
     """
-    # Create the duplicate folder if it doesn't exist
     os.makedirs(folder, exist_ok=True)
-    
     moved_count = 0
-    
-    for short_hash, filenames in duplicates.items():
-        for original_path in filenames:
-            # Get just the filename part (in case path contains directories)
-            filename = os.path.basename(original_path)
-            
-            # New name: DUPLICATED_{short_hash}_{original_filename}
-            new_name = f"{prefix}{short_hash}_{filename}"
+
+    for short_hash, paths in duplicates.items():
+        if len(paths) <= 1:
+            continue  # nothing to do
+
+        # ───────────────────────────────────────────────
+        # Keep the first file → move the rest
+        # ───────────────────────────────────────────────
+        keeper = paths[0]
+        duplicates_to_move = paths[1:]
+
+        for dup_path in duplicates_to_move:
+            if not os.path.exists(dup_path):
+                print(f"Skipped (not found): {dup_path}")
+                continue
+
+            filename = os.path.basename(dup_path)
+            new_name = f"{prefix}{filename}"
             new_path = os.path.join(folder, new_name)
-            
+
             try:
-                # If the file still exists at original location
-                if os.path.exists(original_path):
-                    os.rename(original_path, new_path)
-                    moved_count += 1
-                else:
-                    print(f"Skipped (not found): {original_path}")
+                os.rename(dup_path, new_path)
+                moved_count += 1
+                print(f"Moved: {dup_path} → {new_path}")
             except OSError as e:
-                print(f"Error moving {original_path} → {new_path}: {e}")
-    
-    print(f"{moved_count} duplicated images moved to '{folder}'")
+                print(f"Error moving {dup_path} → {new_path}: {e}")
+
+    print(f"\n{moved_count} duplicate files moved to '{folder}'")
     return moved_count
 
 def makehash(t: tuple[str, Any]) -> None:
@@ -427,6 +431,7 @@ def print_elapsed(sec):
 
 def show_version(config):
     print("imgtoolkit " + version("imgtoolkit"))
+
 
 def set_debug(value):
     if type(value) == bool:
