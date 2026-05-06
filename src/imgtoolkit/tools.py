@@ -718,21 +718,28 @@ def blur_score(img_bgr: np.ndarray) -> float:
 
 
 def is_blurry(img_bgr: np.ndarray, threshold: float = 5.0) -> bool:
-    """Return True if `img_bgr` is considered blurry."""
-    score = blur_score(img_bgr)
-    if score < threshold:
-        return True
+    """Return True if `img_bgr` is considered blurry.
 
-    # Fallback: some images (e.g. with heavy compression patterns) can inflate FFT
-    # energy. Tenengrad (gradient energy) helps catch "soft" images.
+    The decision uses both frequency and gradient signals:
+    - FFT score captures global high-frequency content.
+    - Tenengrad captures local edge strength.
+
+    We classify an image as blurry only when **both** are weak. This prevents
+    textured/sharp images from being incorrectly marked as blur when FFT score
+    alone is low (a case observed in real datasets).
+    """
+    score = blur_score(img_bgr)
     gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
     gray = cv2.resize(gray, (512, 512), interpolation=cv2.INTER_AREA)
     gx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
     gy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
     tenengrad = float(np.mean(gx * gx + gy * gy))
 
-    # Threshold chosen to be conservative; only trigger if *clearly* low-detail.
-    return tenengrad < 20.0
+    # Make the edge threshold scale with user threshold, while keeping a floor.
+    # This keeps `--threshold` intuitive across strict/loose settings.
+    tenengrad_threshold = max(20.0, threshold * 20.0)
+
+    return (score < threshold) and (tenengrad < tenengrad_threshold)
 
 if __name__ == '__main__':
     main()

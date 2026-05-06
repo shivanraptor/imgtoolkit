@@ -86,9 +86,16 @@ imgtoolkit --config config.json find-blur
 
 ### find-blur
 - `--folder`: Output folder for blurry images (default: "blur/")
-- `--threshold`: Blur detection threshold (default: 5.0, lower = more blurry). The detector uses a frequency-domain sharpness score (high/low energy ratio × 1000); typical values are ~3–10.
+- `--threshold`: Blur detection threshold (default: 5.0, lower = more blurry). The detector combines a frequency-domain sharpness score with edge strength (Tenengrad) to reduce false positives on detailed images.
 - `--formats`: List of image formats to process (default: jpg, jpeg, png)
 - During the scan, any JPEG files that are unreadable/truncated (e.g. triggering "Premature end of JPEG file") are moved to a `broken/` subfolder.
+
+### Blur Detection Technology and Techniques
+- **Core stack**: Implemented in Python using `OpenCV (cv2)` for image processing and `NumPy` for matrix/FFT operations.
+- **Frequency-domain sharpness (FFT)**: The image is converted to grayscale, center-cropped, resized to `512x512`, transformed by 2D FFT, then scored by `high-frequency energy / low-frequency energy` (scaled by `x1000`). Lower score means less fine detail, so more likely blur.
+- **Edge-strength validation (Tenengrad)**: Sobel gradients are used to compute gradient energy (Tenengrad). This avoids false positives where FFT score is low but the image still has strong edges and visible detail.
+- **Final decision rule**: An image is classified as blurry only when both signals are weak: low FFT score and low Tenengrad.
+- **Robust file handling**: During `find-blur`, zero-byte files are deleted immediately, and corrupted/truncated JPEGs are moved to the `broken/` folder so the scan can continue.
 
 ### remove-duplicate-prefix
 - `folder`: The folder containing marked duplicate images
@@ -137,6 +144,9 @@ pytest
 ```
 
 ## Version History
+**v0.1.8**
+Improved Find Blurry Image logic
+
 **v0.1.3**
 Resolved a bug of handling incomplete / corrupted image files
 
