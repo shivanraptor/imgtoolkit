@@ -27,6 +27,7 @@ warnings.simplefilter('ignore', Image.DecompressionBombWarning)
 IMG_FILTER = '*.jpg'
 FOLDER_DUP = 'duplicate/'
 FOLDER_BLUR = 'blur/'
+FOLDER_BROKEN = 'broken/'
 DUP_PREFIX = 'DUPLICATED_'
 
 debug_flag = False
@@ -89,17 +90,27 @@ def find_duplicate(folder: str = FOLDER_DUP, prefix: str = DUP_PREFIX, formats: 
         raise ImageToolkitError(f"Error processing images: {str(e)}")
 
 
-def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20, formats: Optional[list[str]] = None) -> None:
+def find_blur(folder: str = FOLDER_BLUR, threshold: float = 5.0, formats: Optional[list[str]] = None) -> None:
     """Detect and move blurry images to a specified folder.
-    
+
+    Notes:
+        The legacy implementation used the *maximum* Laplacian response, which is
+        brittle: a single strong edge or JPEG artifact can prevent a truly blurry
+        photo from being detected.
+
+        This implementation uses a more robust sharpness signal (frequency-domain
+        high/low energy ratio) and falls back to gradient energy for edge cases.
+
     Args:
-        folder: Directory where blurry images will be moved
-        threshold: Laplacian variance threshold for blur detection (lower = more blurry)
-        formats: List of image formats to process (e.g. ['jpg', 'png'])
-        
+        folder: Directory where blurry images will be moved.
+        threshold: Blur threshold for the default method. With the default FFT
+            method this value is compared against `fft_ratio * 1000`
+            (lower = more blurry). Typical values are ~3–10.
+        formats: List of image formats to process (e.g. ['jpg', 'png']).
+
     Raises:
-        ImageToolkitError: If no valid images found or processing fails
-        OSError: If folder creation or file operations fail
+        ImageToolkitError: If no valid images found or processing fails.
+        OSError: If folder creation or file operations fail.
     """
     print("Start finding blurs")
     try:
@@ -114,21 +125,49 @@ def find_blur(folder: str = FOLDER_BLUR, threshold: int = 20, formats: Optional[
 
         cnt = 0
         create_dir(folder)
+        # Always allow writing to `broken/` and keep scanning even if we detect corrupt files.
+        create_dir(FOLDER_BROKEN)
         with alive_bar(len(imgs)) as bar:
             for i in imgs:
                 try:
+                    # Remove zero-byte files immediately.
+                    try:
+                        if os.path.getsize(i) == 0:
+                            print(f"Warning: Zero-byte image removed: {i}")
+                            os.remove(i)
+                            bar()
+                            continue
+                    except OSError:
+                        # If we cannot stat the file, let later logic decide (corrupt/broken).
+                        pass
+
+                    if is_corrupt_image(i):
+                        move_file_to_folder(i, FOLDER_BROKEN)
+                        bar()
+                        continue
+
                     img = cv2.imread(i)
                     if img is None:
                         print(f"Warning: Could not load image {i}")
+                        move_file_to_folder(i, FOLDER_BROKEN)
+                        bar()
                         continue
-                        
-                    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                    val = np.max(cv2.convertScaleAbs(cv2.Laplacian(gray, 3)))
-                    if(val < threshold):
+
+                    if is_blurry(img, threshold=threshold):
                         cnt += 1
-                        os.rename(i, folder + i)
+                        dst = os.path.join(folder, os.path.basename(i))
+                        if os.path.exists(dst):
+                            print(f"Warning: Destination exists, skipping move: {dst}")
+                        else:
+                            os.rename(i, dst)
                 except cv2.error as e:
+                    # If OpenCV cannot decode/process the file, treat it as broken.
                     print(f"Warning: Error processing image {i}: {str(e)}")
+                    move_file_to_folder(i, FOLDER_BROKEN)
+                except Exception as e:
+                    # Any unexpected decode issue should not stop the whole run.
+                    print(f"Warning: Error processing image {i}: {str(e)}")
+                    move_file_to_folder(i, FOLDER_BROKEN)
                 bar()
 
         print(cnt, "blur photos processed, moved to " + folder)
@@ -217,9 +256,12 @@ def analyze_blur(target_folder: str = '.'):
     with alive_bar(len(list(imgs))) as bar:
         for i in imgs:
             img = cv2.imread(i)
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            val = np.max(cv2.convertScaleAbs(cv2.Laplacian(gray, 3)))
-            print(str(i), "Blur Value: " + str(val))
+            if img is None:
+                print(str(i), "Blur Value: <unreadable>")
+                bar()
+                continue
+            score = blur_score(img)
+            print(str(i), f"Blur Score (lower=more blurry): {score:.3f}")
             bar()
 
     end = timer()
@@ -450,7 +492,7 @@ DEFAULT_CONFIG = {
     },
     'blur': {
         'folder': FOLDER_BLUR,
-        'threshold': 20,
+        'threshold': 5.0,
         'formats': ['jpg', 'jpeg', 'png']
     }
 }
@@ -478,7 +520,7 @@ def main():
 
     parser = ArgumentParser(description='Image processing toolkit for finding duplicates and blurry images')
     parser.add_argument('--config', help='Path to configuration file')
-    subparsers = parser.add_subparsers(dest='command', required=True)
+    subparsers = parser.add_subparsers(dest='command')
 
     # version
     parser_version = subparsers.add_parser('version', help='Show version')
@@ -493,7 +535,7 @@ def main():
     # find blur
     parser_find_blur = subparsers.add_parser('find-blur', help='Find and move blurry images')
     parser_find_blur.add_argument('--folder', help='Output folder for blurry images')
-    parser_find_blur.add_argument('--threshold', type=int, help='Blur detection threshold')
+    parser_find_blur.add_argument('--threshold', type=float, help='Blur detection threshold (lower = more blurry)')
     parser_find_blur.add_argument('--formats', nargs='+', help='Image formats to process (e.g. jpg png)')
 
     # remove_duplicate_prefix
@@ -510,7 +552,23 @@ def main():
     config = load_config(args.config if hasattr(args, 'config') else None)
 
     try:
-        if args.command == 'find-duplicates':
+        # Default behavior: no command → run find-blur then find-duplicates.
+        if args.command is None:
+            cfg = load_config(args.config if hasattr(args, 'config') else None)
+            blur_cfg = cfg['blur']
+            dup_cfg = cfg['duplicate']
+
+            find_blur(
+                folder=blur_cfg['folder'],
+                threshold=blur_cfg['threshold'],
+                formats=blur_cfg['formats'],
+            )
+            find_duplicate(
+                folder=dup_cfg['folder'],
+                prefix=dup_cfg['prefix'],
+                formats=dup_cfg['formats'],
+            )
+        elif args.command == 'find-duplicates':
             dup_config = config['duplicate']
             find_duplicate(
                 folder=args.folder or dup_config['folder'],
@@ -579,6 +637,102 @@ def get_image_files(formats: Optional[list[str]] = None) -> list[str]:
     for pattern in patterns:
         images.extend(glob.glob(pattern))
     return images
+
+
+def move_file_to_folder(src_path: str, dst_folder: str) -> None:
+    """Move a file into `dst_folder` without overwriting existing files."""
+    os.makedirs(dst_folder, exist_ok=True)
+    base = os.path.basename(src_path)
+    dst_path = os.path.join(dst_folder, base)
+
+    if not os.path.exists(dst_path):
+        os.rename(src_path, dst_path)
+        return
+
+    root, ext = os.path.splitext(base)
+    k = 1
+    while True:
+        candidate = os.path.join(dst_folder, f"{root}_{k}{ext}")
+        if not os.path.exists(candidate):
+            os.rename(src_path, candidate)
+            return
+        k += 1
+
+
+def is_corrupt_image(path: str) -> bool:
+    """Best-effort corruption check for JPEG files.
+
+    This specifically catches truncated/corrupted JPEGs that often trigger
+    OpenCV/libjpeg messages like "Premature end of JPEG file".
+    """
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in {'.jpg', '.jpeg'}:
+        return False
+
+    # Pillow's verify() will raise for truncated/corrupt images if we disable
+    # LOAD_TRUNCATED_IMAGES temporarily.
+    old_setting = ImageFile.LOAD_TRUNCATED_IMAGES
+    try:
+        ImageFile.LOAD_TRUNCATED_IMAGES = False
+        with Image.open(path) as img:
+            img.verify()
+        return False
+    except Exception:
+        return True
+    finally:
+        ImageFile.LOAD_TRUNCATED_IMAGES = old_setting
+
+
+def blur_score(img_bgr: np.ndarray) -> float:
+    """Compute a robust blur score (lower = more blurry).
+
+    Returns:
+        A scalar blur score where lower values indicate less high-frequency detail.
+        The score is `fft_ratio * 1000` where `fft_ratio` is the ratio of high to
+        low frequency energy in the centered FFT power spectrum of a 512×512 crop.
+    """
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    h, w = gray.shape
+    m = min(h, w)
+    if m <= 0:
+        return 0.0
+
+    # Center-crop to a square (stable for FFT), then downsample for speed.
+    y0 = (h - m) // 2
+    x0 = (w - m) // 2
+    g = gray[y0:y0 + m, x0:x0 + m]
+    g = cv2.resize(g, (512, 512), interpolation=cv2.INTER_AREA)
+    g = g.astype(np.float32)
+    g -= float(g.mean())
+
+    F = np.fft.fftshift(np.fft.fft2(g))
+    P = np.abs(F) ** 2
+
+    # Radial split: inner = low-freq, outer = high-freq.
+    yy, xx = np.ogrid[:512, :512]
+    cy = cx = 256
+    r = np.sqrt((yy - cy) ** 2 + (xx - cx) ** 2)
+    high = float(P[r >= 128].sum())
+    low = float(P[r < 128].sum()) + 1e-9
+    return (high / low) * 1000.0
+
+
+def is_blurry(img_bgr: np.ndarray, threshold: float = 5.0) -> bool:
+    """Return True if `img_bgr` is considered blurry."""
+    score = blur_score(img_bgr)
+    if score < threshold:
+        return True
+
+    # Fallback: some images (e.g. with heavy compression patterns) can inflate FFT
+    # energy. Tenengrad (gradient energy) helps catch "soft" images.
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    gray = cv2.resize(gray, (512, 512), interpolation=cv2.INTER_AREA)
+    gx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
+    tenengrad = float(np.mean(gx * gx + gy * gy))
+
+    # Threshold chosen to be conservative; only trigger if *clearly* low-detail.
+    return tenengrad < 20.0
 
 if __name__ == '__main__':
     main()

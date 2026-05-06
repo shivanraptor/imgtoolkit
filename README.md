@@ -32,10 +32,13 @@ pip install --upgrade imgtoolkit
 # Show help
 imgtoolkit --help
 
-# Find duplicate images
+# Default run (no subcommand): find blurry images, then duplicates
+imgtoolkit
+
+# Find duplicate images only
 imgtoolkit find-duplicates [--folder OUTPUT_FOLDER] [--prefix PREFIX] [--formats jpg png]
 
-# Find blurry images
+# Find blurry images only
 imgtoolkit find-blur [--folder OUTPUT_FOLDER] [--threshold BLUR_THRESHOLD] [--formats jpg png]
 
 # Remove duplicate prefix from images
@@ -61,7 +64,7 @@ Create a JSON configuration file (e.g., `config.json`):
     },
     "blur": {
         "folder": "blurry/",
-        "threshold": 25,
+        "threshold": 5.0,
         "formats": ["jpg", "png"]
     }
 }
@@ -83,8 +86,9 @@ imgtoolkit --config config.json find-blur
 
 ### find-blur
 - `--folder`: Output folder for blurry images (default: "blur/")
-- `--threshold`: Blur detection threshold (default: 20, lower = more blurry)
+- `--threshold`: Blur detection threshold (default: 5.0, lower = more blurry). The detector uses a frequency-domain sharpness score (high/low energy ratio × 1000); typical values are ~3–10.
 - `--formats`: List of image formats to process (default: jpg, jpeg, png)
+- During the scan, any JPEG files that are unreadable/truncated (e.g. triggering "Premature end of JPEG file") are moved to a `broken/` subfolder.
 
 ### remove-duplicate-prefix
 - `folder`: The folder containing marked duplicate images
